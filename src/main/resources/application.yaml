@@ -1,1 +1,55 @@
-spring.application.name=Payment Reconciliation Engine
+spring:
+  application:
+    name: payment_reconciliation_engine
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    url: jdbc:postgresql://${PGHOST}:${PGPORT}/${PGDATABASE}
+    username: ${PGUSER}
+    password: ${PGPASSWORD}
+    driver-class-name: org.postgresql.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
+    clean-disabled: false
+    out-of-order: true
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
+    consumer:
+      group-id: demo-group-1
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+
+logging:
+  level:
+    root: INFO
+    org.apache.kafka: WARN
+    org.apache.kafka.clients.consumer.ConsumerConfig: ERROR
+    org.apache.kafka.clients.producer.ProducerConfig: ERROR
+    org.apache.kafka.clients.admin.AdminClientConfig: ERROR
+    org.apache.kafka.common.utils.AppInfoParser: WARN
+    kafka: WARN
+
+
+paystack:
+  secret-key: ${PAYSTACK_SECRET_KEY}
+  base-url: https://api.paystack.co
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api/v1

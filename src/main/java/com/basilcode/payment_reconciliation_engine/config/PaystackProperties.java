@@ -1,4 +1,7 @@
 package com.basilcode.payment_reconciliation_engine.config;
 
-public class PaystackProperties {
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+@ConfigurationProperties(prefix = "paystack")
+public record PaystackProperties(String secretKey, String baseUrl) {
 }
