@@ -13,18 +13,25 @@ import java.util.concurrent.CompletableFuture;
 @AllArgsConstructor
 @Slf4j
 public class KafkaMessagePublisher {
+
+    static final String PAYSTACK_RAW_TOPIC = "payments.paystack.raw";
+
     private KafkaTemplate<String, Object> kafkaTemplate;
 
     public void PaymentFromPaystack(JsonNode data) {
-        CompletableFuture<SendResult<String, Object>> future = kafkaTemplate.send("demo", data);
+        // keyed by reference so all events for one transaction land on the same
+        // partition and stay ordered relative to each other
+        String reference = data.get("reference").asString();
+
+        CompletableFuture<SendResult<String, Object>> future =
+                kafkaTemplate.send(PAYSTACK_RAW_TOPIC, reference, data);
+
         future.whenComplete((result, ex) -> {
             if (ex == null) {
-                log.info("Sent successfully: " + result.getRecordMetadata());
+                log.info("Published {} to {}", reference, result.getRecordMetadata());
             } else {
-                log.error("Send failed: " + ex.getMessage());
+                log.error("Publish failed for {}: {}", reference, ex.getMessage());
             }
         });
     }
-
-
 }

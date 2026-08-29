@@ -1,9 +1,10 @@
 package com.basilcode.payment_reconciliation_engine.service;
 
-import com.basilcode.payment_reconciliation_engine.components.PaystackNormalizer;
+import com.basilcode.payment_reconciliation_engine.components.Normalizer;
 import com.basilcode.payment_reconciliation_engine.entity.Transaction;
-import com.basilcode.payment_reconciliation_engine.records.TransactionEvent;
+import com.basilcode.payment_reconciliation_engine.records.WebhookRecords;
 import com.basilcode.payment_reconciliation_engine.repositories.TransactionRepository;
+import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -15,12 +16,12 @@ import tools.jackson.databind.JsonNode;
 @Slf4j
 @AllArgsConstructor
 public class KafkaMessageListener {
-    private final PaystackNormalizer paystackNormalizer;
+    private final Normalizer paystackNormalizer;
     private final TransactionRepository transactionRepository;
 
-    @KafkaListener(topics = "payments.paystack.raw")
+    @KafkaListener(topics = KafkaMessagePublisher.PAYSTACK_RAW_TOPIC)
     public void processPaymentListener(JsonNode data) {
-        TransactionEvent event = paystackNormalizer.normalize(data);
+        WebhookRecords event = paystackNormalizer.webhookNormalizer(data);
 
         Transaction transaction = new Transaction();
         transaction.setProvider(event.provider());

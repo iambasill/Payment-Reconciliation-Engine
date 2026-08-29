@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 
 @RestController
 @RequestMapping("/webhooks")
@@ -62,7 +63,11 @@ public class PaystackWebhookController {
             byte[] hashBytes = sha512Hmac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
             String computedSignature = bytesToHex(hashBytes);
 
-            return computedSignature.equals(receivedSignature);
+            // constant-time compare: String.equals short-circuits on the first
+            // differing byte, which leaks the signature one character at a time
+            return MessageDigest.isEqual(
+                    computedSignature.getBytes(StandardCharsets.UTF_8),
+                    receivedSignature.getBytes(StandardCharsets.UTF_8));
         } catch (Exception e) {
             return false;
         }
