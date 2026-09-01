@@ -97,6 +97,9 @@ textarea:focus{outline:none;border-color:var(--accent);}
 .form-group input,.form-group select{width:100%;}
 .toggle-row{display:flex;align-items:center;gap:10px;font-size:13px;}
 input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer;}
+input[type=date]{font:inherit;padding:5px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:13px;}
+input[type=date]:focus{outline:none;border-color:var(--accent);}
+input[type=date]::-webkit-calendar-picker-indicator{filter:invert(0.7);opacity:.6;cursor:pointer;}
 .result-box{margin-top:20px;border-radius:var(--radius);border:1px solid var(--border2);overflow:hidden;display:none;}
 .result-box.show{display:block;}
 .result-header{padding:14px 20px;background:var(--surface2);font-weight:600;font-size:13px;border-bottom:1px solid var(--border2);}
@@ -128,6 +131,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:po
   <div class="nav-item active" data-page="dashboard" id="nav-dashboard"><span class="nav-icon">&#128202;</span> Dashboard</div>
   <div class="nav-item" data-page="queue" id="nav-queue"><span class="nav-icon">&#128269;</span> Review Queue</div>
   <div class="nav-item" data-page="import" id="nav-import"><span class="nav-icon">&#128229;</span> Import Statement</div>
+  <div class="nav-item" data-page="fetch" id="nav-fetch"><span class="nav-icon">&#8659;</span> Fetch Transactions</div>
   <div class="sidebar-spacer"></div>
   <div class="sidebar-footer">Payment Reconciliation Engine</div>
 </nav>
@@ -242,6 +246,47 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:po
       </div>
     </div>
   </div>
+
+  <div class="page" id="page-fetch">
+    <div class="panel" style="max-width:600px;">
+      <div class="panel-header">Fetch Transactions from Paystack</div>
+      <div class="panel-body">
+        <div class="toggle-row" style="margin-bottom:20px;">
+          <input type="checkbox" id="fetch-all-toggle">
+          <label for="fetch-all-toggle" style="cursor:pointer;font-size:13px;">Fetch <b>all</b> transactions (no date filter)</label>
+        </div>
+        <div id="fetch-date-group" class="form-group" style="max-width:260px;">
+          <label for="fetch-date">Date</label>
+          <input type="date" id="fetch-date">
+        </div>
+        <div class="progress-bar" id="fetch-progress"><div class="progress-fill" id="fetch-fill"></div></div>
+        <div style="margin-top:20px;display:flex;gap:10px;align-items:center;">
+          <button class="btn btn-primary" id="fetch-submit">&#8659; Fetch from Paystack</button>
+          <span id="fetch-status" style="font-size:12px;color:var(--muted);"></span>
+        </div>
+        <div class="result-box" id="fetch-result-box">
+          <div class="result-header" id="fetch-result-header">Fetch result</div>
+          <div class="result-stats">
+            <div class="result-stat"><div class="rs-val" id="fetch-rs-fetched" style="color:var(--accent)">&#8212;</div><div class="rs-lbl">Fetched</div></div>
+            <div class="result-stat"><div class="rs-val" id="fetch-rs-created" style="color:var(--green)">&#8212;</div><div class="rs-lbl">Created</div></div>
+            <div class="result-stat"><div class="rs-val" id="fetch-rs-updated" style="color:var(--yellow)">&#8212;</div><div class="rs-lbl">Updated</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="panel" style="max-width:600px;">
+      <div class="panel-header">Notes</div>
+      <div class="panel-body" style="font-size:13px;color:var(--muted);">
+        <ul style="margin:0;padding-left:20px;line-height:2.2;">
+          <li><b>Specific date</b> &mdash; fetches only transactions settled on that date from Paystack</li>
+          <li><b>Fetch all</b> &mdash; pages through all Paystack transactions. May be slow for large accounts.</li>
+          <li>Records are <b>upserted</b> &mdash; existing entries are refreshed, new ones are created.</li>
+          <li>After a successful fetch, run <b>Reconciliation</b> from the dashboard to detect discrepancies.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <div id="toast"></div>
@@ -351,7 +396,7 @@ function renderDetail(it,tr){
     finally{sub.disabled=false;}
   });
 })();
-const pageTitles={dashboard:'Dashboard',queue:'Review Queue',import:'Import Statement'};
+const pageTitles={dashboard:'Dashboard',queue:'Review Queue',import:'Import Statement',fetch:'Fetch Transactions'};
 document.querySelectorAll('.nav-item').forEach(item=>{
   item.addEventListener('click',()=>{
     const page=item.dataset.page;
@@ -372,6 +417,37 @@ $('fsize').onchange=e=>{state.size=+e.target.value;state.page=0;loadItems().catc
 $('prev').onclick=()=>{if(state.page>0){state.page--;loadItems();}};
 $('next').onclick=()=>{if(!state.last){state.page++;loadItems();}};
 async function refresh(){try{await Promise.all([loadSummary(),loadItems()]);}catch(e){toast('Could not load: '+e.message,true);$('stamp').textContent='Disconnected';}}
+(function initFetch(){
+  const toggle=$('fetch-all-toggle'),dateGroup=$('fetch-date-group'),dateInput=$('fetch-date');
+  const btn=$('fetch-submit'),status=$('fetch-status'),prog=$('fetch-progress'),fill=$('fetch-fill');
+  const resultBox=$('fetch-result-box'),resultHeader=$('fetch-result-header');
+  const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
+  dateInput.value=yesterday.toISOString().split('T')[0];
+  toggle.addEventListener('change',()=>{dateGroup.style.display=toggle.checked?'none':''});
+  btn.addEventListener('click',async()=>{
+    btn.disabled=true;
+    const isAll=toggle.checked;
+    status.textContent=isAll?'Fetching all transactions…':'Fetching transactions…';
+    resultBox.classList.remove('show');prog.classList.add('show');
+    let w=0;const iv=setInterval(()=>{w=Math.min(w+Math.random()*12,88);fill.style.width=w+'%';},300);
+    try{
+      const path=isAll?'/fetch-transactions':'/fetch-transactions?date='+dateInput.value;
+      const data=await api(path,{method:'POST'});
+      clearInterval(iv);fill.style.width='100%';
+      setTimeout(()=>{prog.classList.remove('show');fill.style.width='0';},600);
+      $('fetch-rs-fetched').textContent=data.fetched;
+      $('fetch-rs-created').textContent=data.created;
+      $('fetch-rs-updated').textContent=data.updated;
+      resultHeader.textContent='Fetch result'+(data.date&&data.date!=='all'?' — '+data.date:'');
+      resultBox.classList.add('show');
+      toast(`Done: ${data.created} created, ${data.updated} updated.`);
+      loadSummary().catch(()=>{});
+    }catch(err){
+      clearInterval(iv);prog.classList.remove('show');
+      toast('Fetch failed: '+err.message,true);
+    }finally{btn.disabled=false;status.textContent='';}
+  });
+})();
 refresh();
 </script>
 </body>

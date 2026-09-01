@@ -1,10 +1,12 @@
 package com.basilcode.payment_reconciliation_engine.controller;
 
+import com.basilcode.payment_reconciliation_engine.dto.FetchTransactionsResponse;
 import com.basilcode.payment_reconciliation_engine.dto.ImportResultResponse;
 import com.basilcode.payment_reconciliation_engine.dto.PageResponse;
 import com.basilcode.payment_reconciliation_engine.dto.ReconciliationItemResponse;
 import com.basilcode.payment_reconciliation_engine.dto.ReconciliationSummaryResponse;
 import com.basilcode.payment_reconciliation_engine.dto.UpdateReconciliationItemRequest;
+import com.basilcode.payment_reconciliation_engine.scheduler.PaystackSettlementImportScheduler;
 import com.basilcode.payment_reconciliation_engine.service.ReconciliationEngine;
 import com.basilcode.payment_reconciliation_engine.service.ReconciliationReviewService;
 import com.basilcode.payment_reconciliation_engine.service.ReconciliationReviewService.InvalidReconciliationRequestException;
@@ -28,17 +30,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Review queue for reconciliation discrepancies.
- *
- * <pre>
- * GET   /reconciliation/summary                    headline counts
- * GET   /reconciliation/items?status=&amp;reason=      paged queue
- * GET   /reconciliation/items/{id}                 one item
- * PATCH /reconciliation/items/{id}                 set status and/or notes
- * POST  /reconciliation/run                        run a matching pass now
- * </pre>
- */
+
 @RestController
 @RequestMapping("/reconciliation")
 @RequiredArgsConstructor
@@ -47,6 +39,7 @@ public class ReconciliationController {
     private final ReconciliationReviewService reviewService;
     private final ReconciliationEngine reconciliationEngine;
     private final StatementImportService statementImportService;
+    private final PaystackSettlementImportScheduler settlementImportScheduler;
 
     @GetMapping("/summary")
     public ReconciliationSummaryResponse summary() {
@@ -80,6 +73,14 @@ public class ReconciliationController {
         return ResponseEntity.ok(reviewService.summary());
     }
 
+    @PostMapping("/fetch-transactions")
+    public ResponseEntity<FetchTransactionsResponse> fetchTransactions(
+            @RequestParam(required = false) String date) {
+        FetchTransactionsResponse result = (date != null && !date.isBlank())
+                ? settlementImportScheduler.manualFetchByDate(date.trim())
+                : settlementImportScheduler.manualFetchAll();
+        return ResponseEntity.ok(result);
+    }
 
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ImportResultResponse> importStatement(
