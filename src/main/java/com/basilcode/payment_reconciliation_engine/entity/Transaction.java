@@ -2,6 +2,7 @@ package com.basilcode.payment_reconciliation_engine.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.Getter;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -12,6 +13,7 @@ import java.util.UUID;
         name = "transactions"
 )
 @Data
+@Getter
 public class Transaction {
 
     @Id
@@ -39,6 +41,13 @@ public class Transaction {
     @Column(name = "received_at", nullable = false)
     private Instant receivedAt; // when YOUR system got the webhook
 
+    @Column(name = "reconciliation_status", nullable = false)
+    private String reconciliationStatus = "PENDING";
+
     @Version
     private Long version; // optimistic locking — needed for the concurrency test later
+
+
+
+
 }

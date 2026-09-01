@@ -33,6 +33,13 @@ spring:
       value-deserializer: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
       properties:
         spring.json.trusted.packages: "*"
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+  cache:
+    type: redis
 
 logging:
   level:
@@ -44,7 +51,6 @@ logging:
     org.apache.kafka.common.utils.AppInfoParser: WARN
     kafka: WARN
 
-
 paystack:
   secret-key: ${PAYSTACK_SECRET_KEY}
   base-url: https://api.paystack.co
@@ -53,3 +59,8 @@ server:
   port: 8080
   servlet:
     context-path: /api/v1
+
+reconciliation:
+  zone: UTC
+  settlement-import-cron: 0 30 1 * * *
+  reconcile-cron: 0 0 2 * * *

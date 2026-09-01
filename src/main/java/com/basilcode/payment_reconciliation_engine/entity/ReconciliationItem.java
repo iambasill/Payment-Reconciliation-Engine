@@ -41,6 +41,7 @@ public class ReconciliationItem {
     private Instant resolvedAt;
 
     public enum ReconciliationReason {
+        MATCHED,           // both exist and agree — audit row, no action needed
         AMOUNT_MISMATCH,   // both exist, amounts differ
         MISSING_WEBHOOK,   // settlement exists, no matching transaction
         ORPHAN_TRANSACTION,// transaction exists, no matching settlement

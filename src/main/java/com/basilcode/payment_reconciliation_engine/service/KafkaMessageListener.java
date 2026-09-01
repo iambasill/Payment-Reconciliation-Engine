@@ -4,7 +4,6 @@ import com.basilcode.payment_reconciliation_engine.components.Normalizer;
 import com.basilcode.payment_reconciliation_engine.entity.Transaction;
 import com.basilcode.payment_reconciliation_engine.records.WebhookRecords;
 import com.basilcode.payment_reconciliation_engine.repositories.TransactionRepository;
-import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -16,13 +15,31 @@ import tools.jackson.databind.JsonNode;
 @Slf4j
 @AllArgsConstructor
 public class KafkaMessageListener {
+
     private final Normalizer paystackNormalizer;
     private final TransactionRepository transactionRepository;
+
 
     @KafkaListener(topics = KafkaMessagePublisher.PAYSTACK_RAW_TOPIC)
     public void processPaymentListener(JsonNode data) {
         WebhookRecords event = paystackNormalizer.webhookNormalizer(data);
 
+        boolean alreadyStored = transactionRepository
+                .findByProviderAndProviderReference(event.provider(), event.providerReference())
+                .isPresent();
+        if (alreadyStored) {
+            return;
+        }
+
+        try {
+            transactionRepository.save(buildTransaction(event));
+            log.info("Saved new transaction: {}", event.providerReference());
+        } catch (DataIntegrityViolationException e) {
+            log.warn("Duplicate webhook ignored (constraint) for reference: {}", event.providerReference());
+        }
+    }
+
+    private static Transaction buildTransaction(WebhookRecords event) {
         Transaction transaction = new Transaction();
         transaction.setProvider(event.provider());
         transaction.setProviderReference(event.providerReference());
@@ -31,12 +48,7 @@ public class KafkaMessageListener {
         transaction.setStatus(event.status());
         transaction.setCustomerReference(event.customerReference());
         transaction.setReceivedAt(event.receivedAt());
-
-        try {
-            transactionRepository.save(transaction);
-            log.info("Saved new transaction: {}", event.providerReference());
-        } catch (DataIntegrityViolationException e) {
-            log.warn("Duplicate webhook ignored for reference: {}", event.providerReference());
-        }
+        return transaction;
     }
 }
+

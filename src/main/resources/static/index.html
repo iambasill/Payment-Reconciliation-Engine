@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reconciliation Engine</title>
+<meta name="description" content="Payment Reconciliation Engine — real-time dashboard for reviewing and resolving transaction discrepancies.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d1117;--surface:#161b22;--surface2:#1c2333;--border:#30363d;--border2:#21262d;--text:#e6edf3;--muted:#7d8590;--accent:#6366f1;--accent2:#8b5cf6;--green:#3fb950;--yellow:#d29922;--red:#f85149;--orange:#db6d28;--radius:12px;--radius-sm:8px;--shadow:0 8px 32px rgba(0,0,0,.45);--glow:0 0 24px rgba(99,102,241,.18);}
+*,*::before,*::after{box-sizing:border-box;}
+html,body{margin:0;height:100%;}
+body{background:var(--bg);color:var(--text);font-family:'Inter',ui-sans-serif,system-ui,sans-serif;font-size:14px;line-height:1.5;display:flex;min-height:100vh;}
+#sidebar{width:220px;min-height:100vh;background:var(--surface);border-right:1px solid var(--border2);display:flex;flex-direction:column;padding:24px 12px;gap:4px;position:fixed;top:0;left:0;bottom:0;z-index:10;}
+.logo{display:flex;align-items:center;gap:10px;padding:0 8px 24px;border-bottom:1px solid var(--border2);margin-bottom:8px;}
+.logo-icon{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:16px;}
+.logo-text{font-weight:700;font-size:15px;letter-spacing:-0.02em;}
+.logo-sub{font-size:10px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--radius-sm);cursor:pointer;color:var(--muted);font-weight:500;transition:all .18s;border:1px solid transparent;user-select:none;}
+.nav-item:hover{background:var(--surface2);color:var(--text);}
+.nav-item.active{background:rgba(99,102,241,.15);color:var(--accent);border-color:rgba(99,102,241,.3);}
+.nav-icon{font-size:16px;width:20px;text-align:center;}
+.sidebar-spacer{flex:1;}
+.sidebar-footer{padding:12px 10px 0;border-top:1px solid var(--border2);color:var(--muted);font-size:12px;}
+#main{margin-left:220px;flex:1;display:flex;flex-direction:column;min-height:100vh;}
+.topbar{height:60px;background:var(--surface);border-bottom:1px solid var(--border2);display:flex;align-items:center;padding:0 28px;gap:12px;position:sticky;top:0;z-index:5;}
+.topbar-title{font-size:16px;font-weight:600;flex:1;}
+.topbar-stamp{color:var(--muted);font-size:12px;}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--radius-sm);font:500 13px 'Inter',sans-serif;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text);transition:all .15s;}
+.btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent);}
+.btn:disabled{opacity:.4;cursor:default;}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.btn-primary:hover:not(:disabled){filter:brightness(1.12);color:#fff;}
+.btn-sm{padding:5px 10px;font-size:12px;}
+.btn-ghost{background:transparent;border-color:transparent;color:var(--muted);}
+.btn-ghost:hover:not(:disabled){background:var(--surface2);border-color:var(--border);color:var(--text);}
+.page{padding:28px;display:none;}
+.page.active{display:block;}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:16px;margin-bottom:24px;}
+.kpi-card{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:20px;position:relative;overflow:hidden;transition:border-color .2s,box-shadow .2s;}
+.kpi-card:hover{border-color:var(--border);box-shadow:var(--glow);}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--accent2));opacity:0;transition:opacity .2s;}
+.kpi-card:hover::before{opacity:1;}
+.kpi-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;}
+.kpi-value{font-size:28px;font-weight:700;letter-spacing:-0.03em;font-variant-numeric:tabular-nums;}
+.kpi-sub{font-size:11px;color:var(--muted);margin-top:4px;}
+.kpi-open .kpi-value{color:var(--yellow);}
+.kpi-investigating .kpi-value{color:var(--accent2);}
+.kpi-resolved .kpi-value{color:var(--green);}
+.kpi-exposure .kpi-value{color:var(--red);}
+.panel{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);margin-bottom:20px;overflow:hidden;}
+.panel-header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border2);font-weight:600;font-size:13px;}
+.panel-body{padding:16px 20px;}
+.chips{display:flex;flex-wrap:wrap;gap:8px;}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;border:1px solid var(--border);background:var(--surface2);font-size:12px;color:var(--muted);}
+.chip b{color:var(--text);font-variant-numeric:tabular-nums;}
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border2);}
+.filter-label{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;}
+select{font:inherit;padding:5px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:13px;}
+select:focus{outline:none;border-color:var(--accent);}
+.tablewrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;padding:10px 16px;border-bottom:1px solid var(--border2);background:var(--surface);white-space:nowrap;}
+td{padding:11px 16px;border-bottom:1px solid var(--border2);vertical-align:middle;}
+tbody tr.row{cursor:pointer;transition:background .12s;}
+tbody tr.row:hover{background:rgba(99,102,241,.07);}
+tbody tr.row:last-child td{border-bottom:none;}
+.ref{font-family:ui-monospace,'Fira Code',monospace;font-size:12px;}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.muted{color:var(--muted);}
+.neg{color:var(--red);}
+.badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;border:1px solid;white-space:nowrap;letter-spacing:.02em;}
+.badge-OPEN{color:var(--yellow);border-color:var(--yellow);background:rgba(210,153,34,.1);}
+.badge-INVESTIGATING{color:var(--accent2);border-color:var(--accent2);background:rgba(139,92,246,.1);}
+.badge-RESOLVED{color:var(--green);border-color:var(--green);background:rgba(63,185,80,.1);}
+.reason-chip{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:500;background:var(--surface2);border:1px solid var(--border);color:var(--muted);}
+tr.detail td{background:rgba(99,102,241,.04);border-bottom:1px solid var(--border);padding:20px 20px 16px;}
+.dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 24px;margin-bottom:16px;}
+.dgrid div span{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px;}
+.dgrid div{font-size:13px;}
+textarea{width:100%;font:13px/1.5 'Inter',sans-serif;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg);color:var(--text);resize:vertical;min-height:64px;transition:border-color .15s;}
+textarea:focus{outline:none;border-color:var(--accent);}
+.action-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+.pager{display:flex;gap:10px;align-items:center;justify-content:flex-end;padding:12px 20px;color:var(--muted);font-size:12px;border-top:1px solid var(--border2);}
+.empty{padding:60px 20px;text-align:center;color:var(--muted);font-size:14px;}
+.empty-icon{font-size:36px;margin-bottom:12px;opacity:.4;}
+.drop-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:48px 24px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;position:relative;}
+.drop-zone:hover,.drop-zone.drag{border-color:var(--accent);background:rgba(99,102,241,.06);}
+.drop-zone-icon{font-size:40px;margin-bottom:12px;opacity:.5;}
+.drop-zone p{margin:0 0 4px;font-weight:500;}
+.drop-zone small{color:var(--muted);font-size:12px;}
+#file-input{position:absolute;inset:0;opacity:0;cursor:pointer;}
+#file-name{margin-top:12px;font-size:12px;color:var(--accent);font-weight:500;min-height:18px;}
+.import-form{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:20px 0 0;}
+.form-group label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;}
+.form-group input,.form-group select{width:100%;}
+.toggle-row{display:flex;align-items:center;gap:10px;font-size:13px;}
+input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer;}
+.result-box{margin-top:20px;border-radius:var(--radius);border:1px solid var(--border2);overflow:hidden;display:none;}
+.result-box.show{display:block;}
+.result-header{padding:14px 20px;background:var(--surface2);font-weight:600;font-size:13px;border-bottom:1px solid var(--border2);}
+.result-stats{display:flex;gap:0;}
+.result-stat{flex:1;padding:16px 20px;border-right:1px solid var(--border2);text-align:center;}
+.result-stat:last-child{border-right:none;}
+.result-stat .rs-val{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;}
+.result-stat .rs-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:2px;}
+.error-list{padding:14px 20px;font-size:12px;color:var(--red);border-top:1px solid var(--border2);max-height:160px;overflow-y:auto;}
+.error-list li{margin-bottom:4px;}
+.progress-bar{height:3px;background:var(--surface2);border-radius:999px;overflow:hidden;margin-top:16px;display:none;}
+.progress-bar.show{display:block;}
+.progress-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:999px;transition:width .3s ease;}
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(12px);background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:var(--radius-sm);padding:11px 18px;box-shadow:var(--shadow);max-width:90vw;opacity:0;transition:opacity .22s,transform .22s;font-size:13px;pointer-events:none;z-index:100;}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+#toast.err{border-left-color:var(--red);color:var(--red);}
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:999px;}
+@media(max-width:768px){#sidebar{display:none;}#main{margin-left:0;}.import-form{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<nav id="sidebar">
+  <div class="logo">
+    <div class="logo-icon">&#9889;</div>
+    <div><div class="logo-text">RecEngine</div><div class="logo-sub">v2.0</div></div>
+  </div>
+  <div class="nav-item active" data-page="dashboard" id="nav-dashboard"><span class="nav-icon">&#128202;</span> Dashboard</div>
+  <div class="nav-item" data-page="queue" id="nav-queue"><span class="nav-icon">&#128269;</span> Review Queue</div>
+  <div class="nav-item" data-page="import" id="nav-import"><span class="nav-icon">&#128229;</span> Import Statement</div>
+  <div class="sidebar-spacer"></div>
+  <div class="sidebar-footer">Payment Reconciliation Engine</div>
+</nav>
+<div id="main">
+  <header class="topbar">
+    <div class="topbar-title" id="page-title">Dashboard</div>
+    <div class="topbar-stamp" id="stamp">Loading&#8230;</div>
+    <button class="btn" id="run-btn">&#9654; Run pass</button>
+    <button class="btn btn-primary" id="refresh-btn">&#8635; Refresh</button>
+  </header>
+
+  <div class="page active" id="page-dashboard">
+    <div class="kpi-grid" id="kpis"></div>
+    <div class="panel"><div class="panel-header">Transaction pipeline</div><div class="panel-body"><div class="chips" id="pipeline"></div></div></div>
+    <div class="panel"><div class="panel-header">Discrepancies by reason</div><div class="panel-body"><div class="chips" id="reasons"></div></div></div>
+  </div>
+
+  <div class="page" id="page-queue">
+    <div class="panel">
+      <div class="panel-header">Review queue <span id="queue-count" style="color:var(--muted);font-weight:400;font-size:12px;margin-left:8px;"></span></div>
+      <div class="filters">
+        <label class="filter-label">Status
+          <select id="fstatus">
+            <option value="OPEN">Open</option><option value="INVESTIGATING">Investigating</option>
+            <option value="RESOLVED">Resolved</option><option value="ALL">All</option>
+          </select>
+        </label>
+        <label class="filter-label">Reason
+          <select id="freason">
+            <option value="ALL">All</option><option value="AMOUNT_MISMATCH">Amount mismatch</option>
+            <option value="ORPHAN_TRANSACTION">Orphan transaction</option><option value="MISSING_WEBHOOK">Missing webhook</option>
+            <option value="STATUS_MISMATCH">Status mismatch</option><option value="MATCHED">Matched</option>
+          </select>
+        </label>
+        <label class="filter-label">Per page
+          <select id="fsize"><option>25</option><option>50</option><option>100</option></select>
+        </label>
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr>
+            <th>Reference</th><th>Reason</th><th>Status</th>
+            <th class="num">Transaction</th><th class="num">Settlement</th><th class="num">Delta</th><th>Created</th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div id="empty" class="empty" hidden><div class="empty-icon">&#128270;</div>Nothing in the queue for this filter.</div>
+      <div class="pager">
+        <span id="pageinfo"></span>
+        <button class="btn btn-sm" id="prev">&#8592; Prev</button>
+        <button class="btn btn-sm" id="next">Next &#8594;</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="page" id="page-import">
+    <div class="panel" style="max-width:680px;">
+      <div class="panel-header">Import Statement CSV</div>
+      <div class="panel-body">
+        <div class="drop-zone" id="drop-zone">
+          <input type="file" id="file-input" accept=".csv,text/csv">
+          <div class="drop-zone-icon">&#128196;</div>
+          <p>Drop your CSV file here</p>
+          <small>or click to browse &mdash; required columns: <code>reference, amount, currency, status, settled_at</code></small>
+          <div id="file-name"></div>
+        </div>
+        <div class="import-form">
+          <div class="form-group">
+            <label for="imp-provider">Provider</label>
+            <select id="imp-provider">
+              <option value="paystack">Paystack</option>
+              <option value="bank_transfer">Bank transfer</option>
+              <option value="flutterwave">Flutterwave</option>
+              <option value="stripe">Stripe</option>
+            </select>
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end;">
+            <div class="toggle-row">
+              <input type="checkbox" id="imp-reconcile" checked>
+              <label for="imp-reconcile" style="cursor:pointer;">Reconcile after import</label>
+            </div>
+          </div>
+        </div>
+        <div class="progress-bar" id="imp-progress"><div class="progress-fill" id="imp-fill"></div></div>
+        <div style="margin-top:20px;display:flex;gap:10px;align-items:center;">
+          <button class="btn btn-primary" id="imp-submit" disabled>&#11014; Upload &amp; Import</button>
+          <span id="imp-status" style="font-size:12px;color:var(--muted);"></span>
+        </div>
+        <div class="result-box" id="result-box">
+          <div class="result-header">Import result</div>
+          <div class="result-stats">
+            <div class="result-stat"><div class="rs-val" id="rs-created" style="color:var(--green)">&#8212;</div><div class="rs-lbl">Created</div></div>
+            <div class="result-stat"><div class="rs-val" id="rs-updated" style="color:var(--accent)">&#8212;</div><div class="rs-lbl">Updated</div></div>
+            <div class="result-stat"><div class="rs-val" id="rs-skipped" style="color:var(--yellow)">&#8212;</div><div class="rs-lbl">Skipped</div></div>
+            <div class="result-stat"><div class="rs-val" id="rs-matched" style="color:var(--green)">&#8212;</div><div class="rs-lbl">Matched</div></div>
+          </div>
+          <ul class="error-list" id="error-list" hidden></ul>
+        </div>
+      </div>
+    </div>
+    <div class="panel" style="max-width:680px;">
+      <div class="panel-header">CSV Format Reference</div>
+      <div class="panel-body" style="font-size:13px;color:var(--muted);">
+        <p style="margin:0 0 10px;">Required columns (order does not matter, headers are case-insensitive):</p>
+        <code style="display:block;background:var(--bg);padding:12px 16px;border-radius:8px;font-size:12px;color:var(--text);border:1px solid var(--border2);">reference,amount,currency,status,settled_at,fee<br>TXN_001,5000.00,NGN,success,2024-08-30,150.00<br>TXN_002,12500.00,NGN,settled,2024-08-30 14:32:10,</code>
+        <ul style="margin:12px 0 0;padding-left:20px;line-height:2;">
+          <li><b>settled_at</b> or <b>date</b> accepted &mdash; formats: ISO, yyyy-MM-dd, dd/MM/yyyy</li>
+          <li><b>fee</b> is optional &mdash; leave blank or omit the column</li>
+          <li>Amount strips symbols: <code>NGN 1,200.00</code> &rarr; <code>1200.00</code></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<script>
+const API='reconciliation';
+const $=id=>document.getElementById(id);
+const state={page:0,size:25,status:'OPEN',reason:'ALL',expanded:null,last:true};
+let toastTimer;
+function toast(msg,isErr){const t=$('toast');t.textContent=msg;t.className='show'+(isErr?' err':'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.className='',3800);}
+async function api(path,opts){const res=await fetch(API+path,{headers:{'Content-Type':'application/json'},...opts});const text=await res.text();const body=text?JSON.parse(text):null;if(!res.ok)throw new Error((body&&body.error)||res.status+' '+res.statusText);return body;}
+const money=(v,ccy)=>v==null?'—':new Intl.NumberFormat('en-NG',{style:'currency',currency:ccy||'NGN'}).format(v);
+const when=s=>s?new Date(s).toLocaleString():'—';
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+function animateCount(el,target){const start=performance.now(),dur=600;(function step(now){const t=Math.min((now-start)/dur,1),e=1-Math.pow(1-t,3);el.textContent=Math.round(target*e).toLocaleString();if(t<1)requestAnimationFrame(step);})(start);}
+async function loadSummary(){
+  const s=await api('/summary');
+  $('kpis').innerHTML=`
+    <div class="kpi-card kpi-open"><div class="kpi-label">Open</div><div class="kpi-value" id="kv-open">0</div><div class="kpi-sub">Needs attention</div></div>
+    <div class="kpi-card kpi-investigating"><div class="kpi-label">Investigating</div><div class="kpi-value" id="kv-inv">0</div><div class="kpi-sub">In progress</div></div>
+    <div class="kpi-card kpi-resolved"><div class="kpi-label">Resolved</div><div class="kpi-value" id="kv-res">0</div><div class="kpi-sub">Closed out</div></div>
+    <div class="kpi-card"><div class="kpi-label">Total items</div><div class="kpi-value" id="kv-tot">0</div><div class="kpi-sub">All time</div></div>
+    <div class="kpi-card kpi-exposure"><div class="kpi-label">Unresolved exposure</div><div class="kpi-value" style="font-size:18px;" id="kv-exp">—</div><div class="kpi-sub">Amount delta (open)</div></div>`;
+  animateCount($('kv-open'),s.openItems);
+  animateCount($('kv-inv'),s.investigatingItems);
+  animateCount($('kv-res'),s.resolvedItems);
+  animateCount($('kv-tot'),s.totalItems);
+  $('kv-exp').textContent=money(s.unresolvedExposure,'NGN');
+  $('pipeline').innerHTML=Object.entries(s.transactionsByReconciliationStatus||{}).map(([k,v])=>`<span class="chip">${esc(k)} <b>${v}</b></span>`).join('');
+  $('reasons').innerHTML=Object.entries(s.byReason||{}).map(([k,v])=>`<span class="chip">${esc(k.replace(/_/g,' '))} <b>${v}</b></span>`).join('');
+  $('stamp').textContent='Updated '+new Date().toLocaleTimeString();
+}
+async function loadItems(){
+  const q=new URLSearchParams({page:state.page,size:state.size});
+  if(state.status!=='ALL')q.set('status',state.status);
+  if(state.reason!=='ALL')q.set('reason',state.reason);
+  const p=await api('/items?'+q);
+  state.last=p.last;
+  const tbody=$('rows');tbody.innerHTML='';
+  $('empty').hidden=p.content.length>0;
+  $('queue-count').textContent=p.totalElements?`${p.totalElements} item${p.totalElements===1?'':'s'}`:'';
+  for(const it of p.content){
+    const tr=document.createElement('tr');tr.className='row';
+    const delta=it.amountDelta;
+    tr.innerHTML=`<td class="ref">${esc(it.providerReference||'—')}<div class="muted" style="font-size:11px">${esc(it.provider||'')}</div></td>
+      <td><span class="reason-chip">${esc((it.reason||'').replace(/_/g,' '))}</span></td>
+      <td><span class="badge badge-${esc(it.status)}">${esc(it.status)}</span></td>
+      <td class="num">${money(it.transactionAmount,it.currency)}</td>
+      <td class="num">${money(it.settlementAmount,it.currency)}</td>
+      <td class="num ${delta&&Number(delta)!==0?'neg':''}">${delta==null?'—':money(delta,it.currency)}</td>
+      <td class="muted" style="font-size:12px;">${when(it.createdAt)}</td>`;
+    tr.onclick=()=>toggle(it,tr);tbody.appendChild(tr);
+    if(state.expanded===it.id)renderDetail(it,tr);
+  }
+  $('pageinfo').textContent=p.totalElements===0?'No results':`Page ${p.page+1} of ${Math.max(p.totalPages,1)}`;
+  $('prev').disabled=p.page===0;$('next').disabled=p.last;
+}
+function toggle(item,tr){const ex=tr.nextElementSibling;if(ex&&ex.classList.contains('detail')){ex.remove();state.expanded=null;return;}document.querySelectorAll('tr.detail').forEach(n=>n.remove());state.expanded=item.id;renderDetail(item,tr);}
+function renderDetail(it,tr){
+  const d=document.createElement('tr');d.className='detail';
+  d.innerHTML=`<td colspan="7"><div class="dgrid">
+    <div><span>Tx status</span>${esc(it.transactionStatus||'—')}</div>
+    <div><span>Settlement status</span>${esc(it.settlementStatus||'—')}</div>
+    <div><span>Fee</span>${money(it.settlementFee,it.currency)}</div>
+    <div><span>Customer</span>${esc(it.customerReference||'—')}</div>
+    <div><span>Webhook received</span>${when(it.receivedAt)}</div>
+    <div><span>Settled at</span>${when(it.settledAt)}</div>
+    <div><span>Resolved at</span>${when(it.resolvedAt)}</div>
+    <div><span>Item ID</span><span class="ref" style="font-size:11px;">${esc(it.id)}</span></div>
+    </div>
+    <textarea id="notes-${esc(it.id)}" placeholder="Reviewer notes...">${esc(it.notes||'')}</textarea>
+    <div class="action-row">
+      <button class="btn btn-sm" data-act="INVESTIGATING">Investigating</button>
+      <button class="btn btn-sm btn-primary" data-act="RESOLVED">Resolve</button>
+      <button class="btn btn-sm btn-ghost" data-act="OPEN">Reopen</button>
+      <button class="btn btn-sm btn-ghost" data-act="NOTES">Save notes</button>
+    </div></td>`;
+  d.querySelectorAll('button[data-act]').forEach(btn=>{
+    btn.onclick=async e=>{e.stopPropagation();const act=btn.dataset.act,notes=$('notes-'+it.id).value;d.querySelectorAll('button').forEach(b=>b.disabled=true);
+      try{await api('/items/'+it.id,{method:'PATCH',body:JSON.stringify(act==='NOTES'?{notes}:{status:act,notes})});
+        toast(act==='NOTES'?'Notes saved.':'Marked '+act.toLowerCase()+'.');state.expanded=null;await refresh();}
+      catch(err){toast(err.message,true);d.querySelectorAll('button').forEach(b=>b.disabled=false);}};
+  });
+  tr.after(d);
+}
+(function initImport(){
+  const dz=$('drop-zone'),fi=$('file-input'),fn=$('file-name'),sub=$('imp-submit');let file=null;
+  fi.addEventListener('change',()=>{file=fi.files[0]||null;fn.textContent=file?'Attached: '+file.name:'';sub.disabled=!file;});
+  dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');});
+  dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+  dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');file=e.dataTransfer.files[0]||null;fn.textContent=file?'Attached: '+file.name:'';sub.disabled=!file;});
+  sub.addEventListener('click',async()=>{
+    if(!file)return;
+    const provider=$('imp-provider').value,reconcileAfter=$('imp-reconcile').checked;
+    sub.disabled=true;$('imp-status').textContent='Uploading...';
+    const prog=$('imp-progress'),fill=$('imp-fill');prog.classList.add('show');
+    let w=0;const iv=setInterval(()=>{w=Math.min(w+Math.random()*18,88);fill.style.width=w+'%';},200);
+    const fd=new FormData();fd.append('file',file);fd.append('provider',provider);fd.append('reconcileAfter',reconcileAfter);
+    try{
+      const res=await fetch(API+'/import',{method:'POST',body:fd});
+      const data=await res.json();clearInterval(iv);fill.style.width='100%';setTimeout(()=>{prog.classList.remove('show');fill.style.width='0';},600);
+      $('rs-created').textContent=data.created;$('rs-updated').textContent=data.updated;$('rs-skipped').textContent=data.skipped;
+      $('rs-matched').textContent=data.passResult?data.passResult.matched:'—';$('result-box').classList.add('show');
+      const el=$('error-list');if(data.errors&&data.errors.length){el.hidden=false;el.innerHTML=data.errors.map(e=>`<li>${esc(e)}</li>`).join('');}else{el.hidden=true;}
+      toast(res.ok?`Done: ${data.created} created, ${data.updated} updated.`:'Import had errors.',!res.ok);
+      $('imp-status').textContent='';loadSummary().catch(()=>{});
+    }catch(err){clearInterval(iv);prog.classList.remove('show');$('imp-status').textContent='';toast('Upload failed: '+err.message,true);}
+    finally{sub.disabled=false;}
+  });
+})();
+const pageTitles={dashboard:'Dashboard',queue:'Review Queue',import:'Import Statement'};
+document.querySelectorAll('.nav-item').forEach(item=>{
+  item.addEventListener('click',()=>{
+    const page=item.dataset.page;
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    item.classList.add('active');$('page-'+page).classList.add('active');
+    $('page-title').textContent=pageTitles[page]||page;
+    if(page==='queue')loadItems().catch(e=>toast(e.message,true));
+  });
+});
+$('refresh-btn').onclick=refresh;
+$('run-btn').onclick=async()=>{const b=$('run-btn');b.disabled=true;b.textContent='Running...';
+  try{await api('/run',{method:'POST'});toast('Reconciliation pass complete.');await refresh();}
+  catch(e){toast('Run failed: '+e.message,true);}finally{b.disabled=false;b.textContent='Run pass';}};
+$('fstatus').onchange=e=>{state.status=e.target.value;state.page=0;loadItems().catch(x=>toast(x.message,true));};
+$('freason').onchange=e=>{state.reason=e.target.value;state.page=0;loadItems().catch(x=>toast(x.message,true));};
+$('fsize').onchange=e=>{state.size=+e.target.value;state.page=0;loadItems().catch(x=>toast(x.message,true));};
+$('prev').onclick=()=>{if(state.page>0){state.page--;loadItems();}};
+$('next').onclick=()=>{if(!state.last){state.page++;loadItems();}};
+async function refresh(){try{await Promise.all([loadSummary(),loadItems()]);}catch(e){toast('Could not load: '+e.message,true);$('stamp').textContent='Disconnected';}}
+refresh();
+</script>
+</body>
+</html>

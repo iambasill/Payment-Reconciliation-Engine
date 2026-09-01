@@ -1,19 +1,20 @@
 package com.basilcode.payment_reconciliation_engine.entity;
 
-import com.basilcode.payment_reconciliation_engine.records.TransactionRecords;
-import com.basilcode.payment_reconciliation_engine.records.WebhookRecords;
 import jakarta.persistence.*;
 import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 @Entity
 @Table(
-        name = "settlement_records"
+        name = "settlement_records",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uq_settlement_provider_reference",
+                columnNames = {"provider", "provider_reference"})
 )
+
 @Data
 public class SettlementRecord {
 
@@ -45,5 +46,7 @@ public class SettlementRecord {
     @Column(name = "imported_at", nullable = false)
     private Instant importedAt; // when YOU pulled/uploaded this record — useful for audit
 
+    @Version
+    private Long version;
 
 }
